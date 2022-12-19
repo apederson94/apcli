@@ -1,0 +1,12 @@
+url: https://api.apederson-dune.smart.ninja/2.0/internal/auth
+method: POST
+queryParameters:
+  level: 1
+  loc: en_US
+body:
+  type: form-urlencoded
+  value:
+    u: dev@example.com
+    p: test123
+    d: iPhone 8 Plus (iOS 13.3)
+    c: 2
