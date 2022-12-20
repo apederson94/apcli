@@ -6,6 +6,8 @@ import (
 	"gopkg.in/yaml.v3"
 	"log"
 	"os"
+	"regexp"
+	"strings"
 )
 
 func GetApiCall(fileName string) models.ApiCall {
@@ -59,4 +61,22 @@ func Check(e error, message string) {
 func WriteResponseToFile(resp []byte, fileName string) {
 	err := os.WriteFile(fileName, resp, 0700)
 	Check(err, fmt.Sprintf("Failed to write output to %s", fileName))
+}
+
+func RetrieveEnvironmentKeysAndTags(s string) map[string]string {
+	r, err := regexp.Compile("{{\\s?\\w*\\s?}}")
+	Check(err, fmt.Sprintf("Failed to compile regex: %s", "{{\\s?\\w*\\s?}}"))
+
+	keys := r.FindAllString(s, 0)
+
+	var keysAndTags map[string]string
+
+	for _, tag := range keys {
+		key := strings.ReplaceAll(tag, "{", "")
+		key = strings.ReplaceAll(key, "}", "")
+		key = strings.ReplaceAll(key, " ", "")
+		keysAndTags[key] = tag
+	}
+
+	return keysAndTags
 }

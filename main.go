@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -18,6 +19,7 @@ var configLocation = ".apcli.yaml"
 var config models.Config
 var client = http.Client{}
 var savedFields = map[string]interface{}{}
+var environment models.Environment
 
 func main() {
 	var fileName string
@@ -36,8 +38,8 @@ func main() {
 
 		for _, call := range workflow {
 			apiCall := utils.GetApiCall(call.Call)
+			overrideApiParams(apiCall, call.Overrides)
 			req := generateRequest(apiCall)
-			overrideRequestParams(req, call.Overrides)
 			resp := doRequest(req)
 			saveFields(resp, call.FieldsToSave)
 			utils.WriteResponseToFile(resp, config.OutputLocation)
@@ -113,29 +115,78 @@ func generateRequest(call models.ApiCall) *http.Request {
 	return req
 }
 
-func overrideRequestParams(req *http.Request, overrides models.CallOverrides) {
-	// do override logic
-	for key, value := range overrides.Headers {
-		req.Header.Del(key)
-		req.Header.Set(key, value)
+func overrideApiParams(call models.ApiCall, overrides models.CallOverrides) {
+	for k, v := range overrides.Headers {
+		keysAndTags := utils.RetrieveEnvironmentKeysAndTags(v)
+
+		for k, t := range keysAndTags {
+			envValue, ok := environment.SavedValues[k]
+
+			if !ok {
+				log.Fatalln("Failed to find key", k, "in environment")
+			}
+
+			v = strings.ReplaceAll(v, t, envValue)
+		}
+
+		call.Headers[k] = v
 	}
 
-	q := req.URL.Query()
+	for k, v := range overrides.QueryParameters {
+		keysAndTags := utils.RetrieveEnvironmentKeysAndTags(v)
 
-	for key, value := range overrides.QueryParameters {
-		q.Del(key)
-		q.Add(key, value)
+		for k, t := range keysAndTags {
+			envValue, ok := environment.SavedValues[k]
+
+			if !ok {
+				log.Fatalln("Failed to find key", k, "in environment")
+			}
+
+			v = strings.ReplaceAll(v, t, envValue)
+		}
+
+		call.QueryParameters[k] = v
 	}
 
-	req.URL.RawQuery = q.Encode()
+	var drill = call.Body.Value
+	arrayRegex, err := regexp.Compile("(?<=\\[)\\d+")
+	utils.Check(err, fmt.Sprintf("Failed to compile regex: %s", "(?<=\\[)\\d+"))
+
+	for _, v := range overrides.Body {
+		fieldKeys := strings.Split(v, ".")
+
+		for _, fk := range fieldKeys {
+			if strings.ContainsAny(fk, "[]") {
+				newKey := strings.Split(fk, "[")[0]
+				i, err := strconv.Atoi(arrayRegex.FindString(fk))
+				utils.Check(err, fmt.Sprintf("Failed to find index in key: %s", fk))
+
+				drill = drill.(map[string][]interface{})[newKey][i]
+			} else {
+				drill = drill.(map[string]interface{})[fk]
+			}
+		}
+
+		keysAndTags := utils.RetrieveEnvironmentKeysAndTags(v)
+
+		for k, t := range keysAndTags {
+			envValue, ok := environment.SavedValues[k]
+
+			if !ok {
+				log.Fatalln("Failed to find key", k, "in environment")
+			}
+
+			v = strings.ReplaceAll(v, t, envValue)
+		}
+
+		drill = v
+	}
 }
 
 func saveFields(resp interface{}, fields map[string]string) {
-	arrayRegex, err := regexp.Compile("(?<=\\[)\\d+")
-
-	utils.Check(err, fmt.Sprintf("Failed to compile regex: %s", "(?<=\\[)\\d+"))
-
 	var drill = resp
+	arrayRegex, err := regexp.Compile("(?<=\\[)\\d+")
+	utils.Check(err, fmt.Sprintf("Failed to compile regex: %s", "(?<=\\[)\\d+"))
 
 	for k, v := range fields {
 		fieldKeys := strings.Split(v, ".")
