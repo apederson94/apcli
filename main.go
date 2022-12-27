@@ -152,22 +152,8 @@ func overrideApiParams(call models.ApiCall, overrides models.CallOverrides) {
 	arrayRegex, err := regexp.Compile("(?<=\\[)\\d+")
 	utils.Check(err, fmt.Sprintf("Failed to compile regex: %s", "(?<=\\[)\\d+"))
 
-	for _, v := range overrides.Body {
-		fieldKeys := strings.Split(v, ".")
-
-		for _, fk := range fieldKeys {
-			if strings.ContainsAny(fk, "[]") {
-				newKey := strings.Split(fk, "[")[0]
-				i, err := strconv.Atoi(arrayRegex.FindString(fk))
-				utils.Check(err, fmt.Sprintf("Failed to find index in key: %s", fk))
-
-				drill = drill.(map[string][]interface{})[newKey][i]
-			} else {
-				drill = drill.(map[string]interface{})[fk]
-			}
-		}
-
-		keysAndTags := utils.RetrieveEnvironmentKeysAndTags(v)
+	for _, o := range overrides.Body {
+		keysAndTags := utils.RetrieveEnvironmentKeysAndTags(o.Value)
 
 		for k, t := range keysAndTags {
 			envValue, ok := environment.SavedValues[k]
@@ -176,10 +162,29 @@ func overrideApiParams(call models.ApiCall, overrides models.CallOverrides) {
 				log.Fatalln("Failed to find key", k, "in environment")
 			}
 
-			v = strings.ReplaceAll(v, t, envValue)
+			o.Value = strings.ReplaceAll(o.Value, t, envValue)
 		}
 
-		drill = v
+		fieldKeys := strings.Split(o.Key, ".")
+
+		for i, fk := range fieldKeys {
+			if strings.ContainsAny(fk, "[]") {
+				arrayKey := strings.Split(fk, "[")[0]
+				arrayIndex, err := strconv.Atoi(arrayRegex.FindString(fk))
+				utils.Check(err, fmt.Sprintf("Failed to find index in key: %s", fk))
+
+				if i == len(fieldKeys) {
+					drill.(map[string][]interface{})[arrayKey][arrayIndex] = o.Value
+				} else {
+					drill = drill.(map[string][]interface{})[arrayKey][arrayIndex]
+				}
+			} else {
+				if i == len(fieldKeys) {
+					drill.(map[string]interface{})[fk] = o.Value
+				}
+				drill = drill.(map[string]interface{})[fk]
+			}
+		}
 	}
 }
 

@@ -2,6 +2,11 @@ package models
 
 type CallOverrides struct {
 	Headers         map[string]string `yaml:"headers"`
-	Body            map[string]string `yaml:"body"`
+	Body            []BodyOverride    `yaml:"body"`
 	QueryParameters map[string]string `yaml:"queryParameters"`
+}
+
+type BodyOverride struct {
+	Key   string `yaml:"key"`
+	Value string `yaml:"value"`
 }
