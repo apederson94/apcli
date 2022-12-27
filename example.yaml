@@ -1,2 +1,2 @@
-url: https://api.spaceflightnewsapi.net/v3/articles
+url: https://dogapi.dog/api/v2/breeds
 method: GET

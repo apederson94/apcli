@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -83,7 +84,18 @@ func generateRequest(call models.ApiCall) *http.Request {
 			contentType = "application/json"
 		case "form-urlencoded":
 			contentType = "application/x-www-form-urlencoded"
-			fmt.Println(call.Body.Value)
+			bodyValues := url.Values{}
+			bodyMap := call.Body.Value.(map[string]interface{})
+
+			for k, v := range bodyMap {
+				switch v2 := v.(type) {
+				case string:
+					bodyValues.Set(k, v2)
+				case int:
+					bodyValues.Set(k, strconv.Itoa(v2))
+				}
+			}
+			body = []byte(bodyValues.Encode())
 		}
 
 		utils.Check(err, fmt.Sprintf("Failed to read body file %s", call.Body))
